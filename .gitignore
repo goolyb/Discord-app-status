@@ -4,4 +4,5 @@ __pycache__/
 icon-cache.json
 client-id.txt
 *.log
+*.log.err
 .das.pid

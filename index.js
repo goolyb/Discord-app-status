@@ -4,10 +4,12 @@ import { readFileSync, existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { resolveIcon } from "./icons.mjs";
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const cfg = JSON.parse(readFileSync(join(here, "config.json"), "utf8"));
+const isWin = process.platform === "win32";
 
 const idFile = join(here, "client-id.txt");
 const clientId =
@@ -16,7 +18,7 @@ const clientId =
   "";
 
 if (!clientId || clientId.startsWith("PASTE")) {
-  console.error("No Discord Application ID set. Run: ./das setup");
+  console.error("No Discord Application ID set. Run: das setup");
   process.exit(1);
 }
 
@@ -32,34 +34,36 @@ function pretty(name) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-async function getFocused() {
-  try {
-    const { stdout } = await run("gdbus", [
-      "call", "--session",
-      "--dest", "org.gnome.Shell",
-      "--object-path", "/org/gnome/shell/extensions/FocusedWindow",
-      "--method", "org.gnome.shell.extensions.FocusedWindow.Get",
-    ]);
-    const m = stdout.match(/^\('(.*)',\)\s*$/s);
-    if (!m) return null;
-    const json = m[1].replace(/\\'/g, "'").replace(/\\\\/g, "\\");
-    const data = JSON.parse(json);
-    if (!data || !data.wm_class) return null;
-    return { app: pretty(data.wm_class), wm: data.wm_class };
-  } catch (e) {
-    return null;
-  }
+async function getFocusedLinux() {
+  const { stdout } = await run("gdbus", [
+    "call", "--session",
+    "--dest", "org.gnome.Shell",
+    "--object-path", "/org/gnome/shell/extensions/FocusedWindow",
+    "--method", "org.gnome.shell.extensions.FocusedWindow.Get",
+  ]);
+  const m = stdout.match(/^\('(.*)',\)\s*$/s);
+  if (!m) return null;
+  const json = m[1].replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+  const data = JSON.parse(json);
+  if (!data || !data.wm_class) return null;
+  return { app: pretty(data.wm_class), wm: data.wm_class, exe: "" };
 }
 
-async function iconFor(wm) {
+async function getFocusedWindows() {
+  const { stdout } = await run("powershell", [
+    "-NoProfile", "-ExecutionPolicy", "Bypass",
+    "-File", join(here, "winfocus.ps1"),
+  ], { timeout: 15000 });
+  const data = JSON.parse(stdout.trim() || "{}");
+  if (!data || !data.wm) return null;
+  return { app: pretty(data.app || data.wm), wm: data.wm, exe: data.exe || "" };
+}
+
+async function getFocused() {
   try {
-    const { stdout } = await run("python3", [join(here, "resolve_icon.py"), wm], {
-      timeout: 45000,
-    });
-    const url = stdout.trim();
-    return url.startsWith("http") ? url : "app";
-  } catch (e) {
-    return "app";
+    return isWin ? await getFocusedWindows() : await getFocusedLinux();
+  } catch {
+    return null;
   }
 }
 
@@ -77,7 +81,7 @@ async function tick() {
     return;
   }
 
-  const icon = await iconFor(cur.wm);
+  const icon = await resolveIcon(cur.wm, cur.exe);
 
   await client.user?.setActivity({
     details: `In ${app}`,
@@ -98,6 +102,6 @@ client.on("ready", () => {
 
 client.login().catch((e) => {
   console.error("Discord login failed:", e.message);
-  console.error("Is Discord running? Is the ipc socket symlinked?");
+  console.error("Is Discord running?");
   process.exit(1);
 });
