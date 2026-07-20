@@ -100,8 +100,18 @@ client.on("ready", () => {
   setInterval(tick, (cfg.pollSeconds || 5) * 1000);
 });
 
-client.login().catch((e) => {
-  console.error("Discord login failed:", e.message);
-  console.error("Is Discord running?");
-  process.exit(1);
-});
+async function connect() {
+  const delay = (cfg.retrySeconds || 15) * 1000;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await client.login();
+      return;
+    } catch (e) {
+      console.error(`Discord login failed (attempt ${attempt}):`, e.message);
+      console.error(`Discord not reachable yet — retrying in ${delay / 1000}s`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
+connect();
