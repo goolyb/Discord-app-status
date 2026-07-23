@@ -10,6 +10,41 @@ Instead of Discord's per-game detection, this reads your focused window and upda
 - **Windows:** the foreground window and its `.exe` are read via PowerShell; the icon is extracted from the executable.
 - The icon is uploaded to a public host and passed to Discord as an external image URL. Apps without a local icon fall back to a public icon CDN.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Browser["Browser — Firefox / Chrome / Zen"]
+        EXT["WebExtension<br/>firefox-ext / chrome-ext"]
+    end
+
+    subgraph Focus["Focus source (per OS)"]
+        LINUX["Linux: GNOME Focused Window<br/>D-Bus via gdbus"]
+        WIN["Windows: winfocus.ps1<br/>WinAPI GetForegroundWindow"]
+    end
+
+    subgraph Core["index.js — Node process"]
+        RECV["HTTP receiver<br/>127.0.0.1:6060"]
+        TICK["tick loop, every 5s<br/>focused app + domain"]
+        ICON["icon resolver<br/>system theme / .exe"]
+        THROTTLE["throttle<br/>max 1 update / 15s"]
+    end
+
+    DISCORD["Discord desktop client<br/>Rich Presence over IPC"]
+    FRIENDS["Friends see:<br/>FIREFOX · youtube.com"]
+
+    EXT -- "POST active tab URL" --> RECV
+    LINUX -- "focused window" --> TICK
+    WIN -- "focused window" --> TICK
+    RECV -- "latest URL (≤30s)" --> TICK
+    ICON --> TICK
+    TICK --> THROTTLE
+    THROTTLE -- "setActivity()" --> DISCORD
+    DISCORD --> FRIENDS
+```
+
+**Flow:** every 5s `index.js` asks the OS which window is focused. If it's a browser, it grabs the latest tab URL that the WebExtension pushed to the local receiver (`127.0.0.1:6060`) and extracts the domain. It resolves the app icon, then sends the whole activity to the Discord desktop client over its local IPC socket — throttled to once per 15s to respect Discord's rate limit. Nothing talks to Discord's web API, so no account risk.
+
 ## Requirements
 
 - [Node.js](https://nodejs.org) 18+
