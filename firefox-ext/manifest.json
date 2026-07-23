@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+  "name": "DAS URL Reporter",
+  "version": "1.0",
+  "description": "Reports active tab URL to local Discord App Status script.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "das-url-reporter@oleh.local",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": [
+    "tabs",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  }
+}

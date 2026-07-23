@@ -70,7 +70,33 @@ Names and icon overrides live in `config.json`:
 
 If an app shows the wrong icon or none, add it to `iconOverride`. To force a refresh, delete its entry from `icon-cache.json`.
 
+## Showing the current website (Firefox)
+
+Optionally, when Firefox is focused the status can also show the active tab's domain (e.g. `FIREFOX` with `youtube.com` underneath).
+
+Because Firefox from the snap package is sandboxed (remote debugging, Marionette and the accessibility bus are all blocked), the domain is read via a tiny bundled WebExtension in `firefox-ext/` that POSTs the active tab's URL to a local receiver the script runs on `127.0.0.1:6060`. Only the hostname is used; internal pages (`about:`, `file:`, …) are ignored, and stale URLs older than 30s are dropped.
+
+### Install the extension
+
+1. Sign it once against your own [addons.mozilla.org API key](https://addons.mozilla.org/developers/addon/api/key/):
+   ```bash
+   cd firefox-ext
+   npx web-ext sign --channel=unlisted --api-key=YOUR_KEY --api-secret=YOUR_SECRET
+   ```
+   This produces a signed `.xpi` in `firefox-ext/web-ext-artifacts/`.
+2. In Firefox open `about:addons` → gear ⚙️ → **Install Add-on From File…** → pick the `.xpi`.
+
+For a quick test without signing, load it temporarily via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → `firefox-ext/manifest.json` (this is dropped on browser restart).
+
+### Config
+
+- **`urlPort`** — port of the local URL receiver (default `6060`).
+- **`urlMaxAgeSeconds`** — ignore reported URLs older than this (default `30`).
+
+Chrome/Chromium/Brave also work with the same extension if loaded there.
+
 ## Notes
 
 - Your Application ID is stored in `client-id.txt` (git-ignored), not in `config.json`.
+- Presence updates are throttled to once per 15s (Discord's Rich Presence rate limit), so rapid window/tab switching won't cause the status to stall.
 - Icon URLs are hosted on a free temporary host and auto-refreshed before they expire, so regularly-used apps keep working without intervention.

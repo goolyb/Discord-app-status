@@ -6,3 +6,18 @@ client-id.txt
 *.log
 *.log.err
 .das.pid
+
+# Secrets / env
+.env
+.env.*
+*.env
+secrets.json
+*.secret
+*.key
+*.pem
+web-ext-config.js
+.web-ext-config*
+
+# Firefox extension build/account artifacts
+firefox-ext/web-ext-artifacts/
+firefox-ext/.amo-upload-uuid
