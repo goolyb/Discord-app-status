@@ -56,7 +56,7 @@ function domainOf(u) {
 
 function browserDomain(wm) {
   const w = (wm || "").toLowerCase();
-  if (!/firefox|chrome|chromium|brave/.test(w)) return null;
+  if (!/firefox|chrome|chromium|brave|zen|msedge/.test(w)) return null;
   if (Date.now() - latestUrl.at > urlMaxAgeMs) return null;
   return domainOf(latestUrl.url);
 }

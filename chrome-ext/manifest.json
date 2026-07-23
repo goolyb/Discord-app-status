@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "DAS URL Reporter",
+  "version": "1.0",
+  "description": "Reports active tab URL to local Discord App Status script.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["tabs"],
+  "host_permissions": ["http://127.0.0.1/*"]
+}

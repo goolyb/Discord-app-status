@@ -70,30 +70,41 @@ Names and icon overrides live in `config.json`:
 
 If an app shows the wrong icon or none, add it to `iconOverride`. To force a refresh, delete its entry from `icon-cache.json`.
 
-## Showing the current website (Firefox)
+## Showing the current website
 
-Optionally, when Firefox is focused the status can also show the active tab's domain (e.g. `FIREFOX` with `youtube.com` underneath).
+Optionally, when a browser is focused the status also shows the active tab's domain (e.g. `FIREFOX` with `youtube.com` underneath). Works the same on **Linux and Windows**.
 
-Because Firefox from the snap package is sandboxed (remote debugging, Marionette and the accessibility bus are all blocked), the domain is read via a tiny bundled WebExtension in `firefox-ext/` that POSTs the active tab's URL to a local receiver the script runs on `127.0.0.1:6060`. Only the hostname is used; internal pages (`about:`, `file:`, …) are ignored, and stale URLs older than 30s are dropped.
+A tiny bundled WebExtension reports the active tab's URL to a local receiver the script runs on `127.0.0.1:6060` (the receiver starts automatically with `das`/`das.ps1` on both platforms). Only the hostname is used; internal pages (`about:`, `chrome://`, `file:`, …) are ignored, and stale URLs older than 30s are dropped. This works even for sandboxed browsers (e.g. snap Firefox, where remote debugging and the accessibility bus are blocked).
 
-### Install the extension
+Two builds are provided:
+- **`firefox-ext/`** — for Firefox and **Zen** (a Firefox fork).
+- **`chrome-ext/`** — for Chrome, Chromium, Brave and Edge (Manifest V3).
 
-1. Sign it once against your own [addons.mozilla.org API key](https://addons.mozilla.org/developers/addon/api/key/):
-   ```bash
-   cd firefox-ext
-   npx web-ext sign --channel=unlisted --api-key=YOUR_KEY --api-secret=YOUR_SECRET
-   ```
-   This produces a signed `.xpi` in `firefox-ext/web-ext-artifacts/`.
-2. In Firefox open `about:addons` → gear ⚙️ → **Install Add-on From File…** → pick the `.xpi`.
+### Chrome / Chromium / Brave / Edge
 
-For a quick test without signing, load it temporarily via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → `firefox-ext/manifest.json` (this is dropped on browser restart).
+1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`).
+2. Enable **Developer mode** (top-right toggle).
+3. Click **Load unpacked** → select the `chrome-ext/` folder.
+
+Persists across restarts, no signing needed.
+
+### Firefox / Zen
+
+Firefox release builds only install signed extensions, so sign it once against your own [addons.mozilla.org API key](https://addons.mozilla.org/developers/addon/api/key/):
+
+```bash
+cd firefox-ext
+npx web-ext sign --channel=unlisted --api-key=YOUR_KEY --api-secret=YOUR_SECRET
+```
+
+This produces a signed `.xpi` in `firefox-ext/web-ext-artifacts/`. Then in Firefox/Zen open `about:addons` → gear ⚙️ → **Install Add-on From File…** → pick the `.xpi`.
+
+For a quick test without signing, load it temporarily via `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → `firefox-ext/manifest.json` (dropped on browser restart).
 
 ### Config
 
 - **`urlPort`** — port of the local URL receiver (default `6060`).
 - **`urlMaxAgeSeconds`** — ignore reported URLs older than this (default `30`).
-
-Chrome/Chromium/Brave also work with the same extension if loaded there.
 
 ## Notes
 
