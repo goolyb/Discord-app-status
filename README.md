@@ -27,7 +27,7 @@ flowchart TD
         RECV["HTTP receiver<br/>127.0.0.1:6060"]
         TICK["tick loop, every 5s<br/>focused app + domain"]
         ICON["icon resolver<br/>system theme / .exe"]
-        THROTTLE["throttle<br/>max 1 update / 15s"]
+        THROTTLE["throttle<br/>max 1 update / 5s"]
     end
 
     DISCORD["Discord desktop client<br/>Rich Presence over IPC"]
@@ -43,7 +43,7 @@ flowchart TD
     DISCORD --> FRIENDS
 ```
 
-**Flow:** every 5s `index.js` asks the OS which window is focused. If it's a browser, it grabs the latest tab URL that the WebExtension pushed to the local receiver (`127.0.0.1:6060`) and extracts the domain. It resolves the app icon, then sends the whole activity to the Discord desktop client over its local IPC socket — throttled to once per 15s to respect Discord's rate limit. Nothing talks to Discord's web API, so no account risk.
+**Flow:** every 5s `index.js` asks the OS which window is focused. If it's a browser, it grabs the latest tab URL that the WebExtension pushed to the local receiver (`127.0.0.1:6060`) and extracts the domain. It resolves the app icon, then sends the whole activity to the Discord desktop client over its local IPC socket — throttled to once per 5s (configurable) to respect Discord's rate limit. Nothing talks to Discord's web API, so no account risk.
 
 ## Requirements
 
@@ -94,6 +94,9 @@ status              is it running? + current window
 logs                follow the log
 enable-autostart    run automatically on login
 disable-autostart   don't run on login
+block <domain>      hide a site's domain from your status
+unblock <domain>    stop hiding a domain
+blacklist           list blocked domains
 ```
 
 ## Customizing icons
@@ -110,6 +113,18 @@ If an app shows the wrong icon or none, add it to `iconOverride`. To force a ref
 Optionally, when a browser is focused the status also shows the active tab's domain (e.g. `FIREFOX` with `youtube.com` underneath). Works the same on **Linux and Windows**.
 
 A tiny bundled WebExtension reports the active tab's URL to a local receiver the script runs on `127.0.0.1:6060` (the receiver starts automatically with `das`/`das.ps1` on both platforms). Only the hostname is used; internal pages (`about:`, `chrome://`, `file:`, …) are ignored, and stale URLs older than 30s are dropped. This works even for sandboxed browsers (e.g. snap Firefox, where remote debugging and the accessibility bus are blocked).
+
+### Hiding sites (blacklist)
+
+Keep certain domains out of your status — friends then see only the browser, no site. Blocked domains **and their subdomains** are hidden (`youtube.com` also hides `m.youtube.com`).
+
+```bash
+./das block youtube.com     # hide it (full URLs / www. are cleaned automatically)
+./das unblock youtube.com   # show it again
+./das blacklist             # list blocked domains
+```
+
+Stored in `config.json` under `"blacklist"`; changes apply live within one poll — no restart needed.
 
 Two builds are provided:
 - **`firefox-ext/`** — for Firefox and **Zen** (a Firefox fork).
@@ -140,9 +155,12 @@ For a quick test without signing, load it temporarily via `about:debugging#/runt
 
 - **`urlPort`** — port of the local URL receiver (default `6060`).
 - **`urlMaxAgeSeconds`** — ignore reported URLs older than this (default `30`).
+- **`pollSeconds`** — how often the focused window is checked (default `5`).
+- **`minUpdateSeconds`** — minimum gap between Discord updates (default `5`; don't go below ~4s or Discord rate-limits).
+- **`blacklist`** — domains to hide from the status (manage with `./das block`/`unblock`).
 
 ## Notes
 
 - Your Application ID is stored in `client-id.txt` (git-ignored), not in `config.json`.
-- Presence updates are throttled to once per 15s (Discord's Rich Presence rate limit), so rapid window/tab switching won't cause the status to stall.
+- Presence updates are throttled to once per 5s by default (`minUpdateSeconds`), within Discord's Rich Presence rate limit, so rapid window/tab switching won't cause the status to stall.
 - Icon URLs are hosted on a free temporary host and auto-refreshed before they expire, so regularly-used apps keep working without intervention.
