@@ -3,6 +3,7 @@
   "pollSeconds": 5,
   "minUpdateSeconds": 5,
   "hideWhenIdle": true,
+  "blacklist": [],
   "nameMap": {
     "google-chrome": "Google Chrome",
     "chromium": "Chromium",

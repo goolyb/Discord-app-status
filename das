@@ -102,6 +102,55 @@ EOF
 
 cmd_disable_autostart() { rm -f "$AUTOSTART"; echo "Autostart disabled."; }
 
+cmd_block() {
+  local dom="${1:-}"
+  [ -n "$dom" ] || { echo "Usage: ./das block <domain>"; exit 1; }
+  python3 - "$HERE/config.json" "$dom" <<'PY'
+import json, sys
+f, dom = sys.argv[1], sys.argv[2].strip().lower()
+dom = dom.replace("https://", "").replace("http://", "").split("/")[0]
+if dom.startswith("www."): dom = dom[4:]
+if not dom: print("Invalid domain."); sys.exit(1)
+c = json.load(open(f, encoding="utf-8"))
+bl = c.get("blacklist", [])
+if dom in bl:
+    print("already blocked:", dom)
+else:
+    bl.append(dom); c["blacklist"] = bl
+    json.dump(c, open(f, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+    print("blocked:", dom, "(hidden from status within ~5s)")
+PY
+}
+
+cmd_unblock() {
+  local dom="${1:-}"
+  [ -n "$dom" ] || { echo "Usage: ./das unblock <domain>"; exit 1; }
+  python3 - "$HERE/config.json" "$dom" <<'PY'
+import json, sys
+f, dom = sys.argv[1], sys.argv[2].strip().lower()
+dom = dom.replace("https://", "").replace("http://", "").split("/")[0]
+if dom.startswith("www."): dom = dom[4:]
+c = json.load(open(f, encoding="utf-8"))
+bl = c.get("blacklist", [])
+if dom in bl:
+    bl.remove(dom); c["blacklist"] = bl
+    json.dump(c, open(f, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+    print("unblocked:", dom)
+else:
+    print("not in blacklist:", dom)
+PY
+}
+
+cmd_blacklist() {
+  python3 - "$HERE/config.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+bl = c.get("blacklist", [])
+print("Blocked domains:" if bl else "Blacklist is empty.")
+for d in bl: print("  -", d)
+PY
+}
+
 case "${1:-}" in
   setup)             shift; cmd_setup "${1:-}";;
   start)             cmd_start;;
@@ -111,6 +160,9 @@ case "${1:-}" in
   logs)              shift; cmd_logs "${1:-30}";;
   enable-autostart)  cmd_enable_autostart;;
   disable-autostart) cmd_disable_autostart;;
+  block)             shift; cmd_block "${1:-}";;
+  unblock)           shift; cmd_unblock "${1:-}";;
+  blacklist)         cmd_blacklist;;
   *)
     cat <<EOF
 discord-app-status — show your focused app in Discord
@@ -125,6 +177,9 @@ Usage: ./das <command>
   logs [N]            follow the log (last N lines)
   enable-autostart    run automatically on login
   disable-autostart   don't run on login
+  block <domain>      hide a site's domain from your status
+  unblock <domain>    stop hiding a domain
+  blacklist           list blocked domains
 
 First time:  ./das setup   then   ./das start
 EOF

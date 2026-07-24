@@ -54,11 +54,29 @@ function domainOf(u) {
   }
 }
 
+function loadBlacklist() {
+  try {
+    const c = JSON.parse(readFileSync(join(here, "config.json"), "utf8"));
+    return (c.blacklist || []).map((s) =>
+      String(s).toLowerCase().replace(/^www\./, "")
+    );
+  } catch {
+    return [];
+  }
+}
+
+function isBlocked(domain) {
+  if (!domain) return false;
+  const d = domain.toLowerCase();
+  return loadBlacklist().some((b) => b && (d === b || d.endsWith("." + b)));
+}
+
 function browserDomain(wm) {
   const w = (wm || "").toLowerCase();
   if (!/firefox|chrome|chromium|brave|zen|msedge/.test(w)) return null;
   if (Date.now() - latestUrl.at > urlMaxAgeMs) return null;
-  return domainOf(latestUrl.url);
+  const d = domainOf(latestUrl.url);
+  return isBlocked(d) ? null : d;
 }
 
 function pretty(name) {
