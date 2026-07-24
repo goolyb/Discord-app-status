@@ -6,6 +6,21 @@ import sys, os, glob, configparser
 HERE = os.path.dirname(os.path.abspath(__file__))
 TMP = "/tmp/discord-app-status-icons"
 
+ICON_SIZE = 256     # fixed output square
+ICON_CONTENT = 254  # visible icon size inside the square; smaller = more padding
+
+
+def _pad_square(pb):
+    from gi.repository import GdkPixbuf
+    w, h = pb.get_width(), pb.get_height()
+    canvas = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, ICON_SIZE, ICON_SIZE)
+    canvas.fill(0x00000000)
+    ox = (ICON_SIZE - w) // 2
+    oy = (ICON_SIZE - h) // 2
+    pb.composite(canvas, ox, oy, w, h, ox, oy, 1, 1,
+                 GdkPixbuf.InterpType.BILINEAR, 255)
+    return canvas
+
 
 def rasterize(icon_name):
     os.makedirs(TMP, exist_ok=True)
@@ -16,10 +31,11 @@ def rasterize(icon_name):
         try:
             import gi
             gi.require_version("Gtk", "3.0")
+            gi.require_version("GdkPixbuf", "2.0")
             from gi.repository import Gtk
             theme = Gtk.IconTheme.get_default()
-            pb = theme.load_icon(icon_name, 256, 0)
-            pb.savev(out, "png", [], [])
+            pb = theme.load_icon(icon_name, ICON_CONTENT, 0)
+            _pad_square(pb).savev(out, "png", [], [])
             return out
         except Exception:
             return None
@@ -27,8 +43,8 @@ def rasterize(icon_name):
         import gi
         gi.require_version("GdkPixbuf", "2.0")
         from gi.repository import GdkPixbuf
-        pb = GdkPixbuf.Pixbuf.new_from_file_at_size(src, 256, 256)
-        pb.savev(out, "png", [], [])
+        pb = GdkPixbuf.Pixbuf.new_from_file_at_size(src, ICON_CONTENT, ICON_CONTENT)
+        _pad_square(pb).savev(out, "png", [], [])
         return out
     except Exception:
         return src if src.lower().endswith(".png") else None

@@ -1,6 +1,7 @@
 {
   "clientId": "",
   "pollSeconds": 5,
+  "minUpdateSeconds": 5,
   "hideWhenIdle": true,
   "nameMap": {
     "google-chrome": "Google Chrome",

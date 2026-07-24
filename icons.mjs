@@ -9,8 +9,8 @@ const run = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CACHE = join(HERE, "icon-cache.json");
 const CDN = (s) => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${s}.png`;
-const REFRESH_AFTER = 40 * 3600 * 1000; // re-upload litterbox links before 72h expiry
-const LITTERBOX = "https://litterbox.catbox.moe/resources/internals/api.php";
+const REFRESH_AFTER = 2 * 3600 * 1000; // re-upload before short-lived host links expire
+const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
 const CDN_MAP = {
   "google-chrome": "google-chrome", chromium: "chromium", firefox: "firefox",
@@ -40,19 +40,57 @@ async function cdnOk(slug) {
   } catch { return null; }
 }
 
+async function download(url) {
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    const p = join(tmpdir(), "das-dl-" + url.replace(/[^a-z0-9]/gi, "_").slice(-48) + ".png");
+    writeFileSync(p, buf);
+    return p;
+  } catch { return null; }
+}
+
+// pad any icon file into a fixed square with margin (reuses resolve_icon.py)
+async function normalize(path) {
+  try {
+    if (process.platform === "win32") return path;
+    const { stdout } = await run("python3", [join(HERE, "resolve_icon.py"), path], {
+      timeout: 20000,
+    });
+    const p = stdout.trim();
+    return p && existsSync(p) ? p : path;
+  } catch { return path; }
+}
+
+// upload a local png, return a public direct-image URL (or null).
+// litterbox/catbox died (403); use uguu.se, fall back to tmpfiles.org.
 async function litterbox(path) {
+  const buf = rf(path);
   for (let i = 0; i < 3; i++) {
     try {
-      const buf = rf(path);
       const fd = new FormData();
-      fd.append("reqtype", "fileupload");
-      fd.append("time", "72h");
-      fd.append("fileToUpload", new Blob([buf]), "icon.png");
-      const r = await fetch(LITTERBOX, {
-        method: "POST", body: fd, headers: { "User-Agent": "Mozilla/5.0" },
+      fd.append("files[]", new Blob([buf]), "icon.png");
+      const r = await fetch("https://uguu.se/upload.php", {
+        method: "POST", body: fd, headers: { "User-Agent": UA },
       });
-      const t = (await r.text()).trim();
-      if (t.startsWith("http")) return t;
+      if (r.ok) {
+        const j = await r.json();
+        const u = j?.files?.[0]?.url;
+        if (u && u.startsWith("http")) return u;
+      }
+    } catch {}
+    try {
+      const fd = new FormData();
+      fd.append("file", new Blob([buf]), "icon.png");
+      const r = await fetch("https://tmpfiles.org/api/v1/upload", {
+        method: "POST", body: fd, headers: { "User-Agent": UA },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const u = j?.data?.url;
+        if (u) return u.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+      }
     } catch {}
     await new Promise((res) => setTimeout(res, 2000));
   }
@@ -94,14 +132,13 @@ export async function resolveIcon(wm, exe = "") {
   // 0) manual override (substring match on window class)
   for (const [key, val] of Object.entries(loadOverrides())) {
     if (wm.toLowerCase().includes(key.toLowerCase())) {
-      if (val.startsWith("http")) {
-        cache[wm] = { url: val, source: "override", ts: now };
-        saveCache(cache);
-        return val;
+      let src = null;
+      if (val.startsWith("http")) src = await download(val);
+      else { const path = isAbsolute(val) ? val : join(HERE, val); src = existsSync(path) ? path : null; }
+      if (src) {
+        const u = await litterbox(await normalize(src));
+        if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
       }
-      const path = isAbsolute(val) ? val : join(HERE, val);
-      const u = existsSync(path) ? await litterbox(path) : null;
-      if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
     }
   }
 
@@ -119,8 +156,13 @@ export async function resolveIcon(wm, exe = "") {
     if (await cdnOk(guess)) slug = guess;
   }
   if (slug) {
-    const u = await cdnOk(slug);
-    if (u) { cache[wm] = { url: u, source: "cdn", ts: now }; saveCache(cache); return u; }
+    const cdnUrl = await cdnOk(slug);
+    if (cdnUrl) {
+      const dl = await download(cdnUrl);
+      const u = dl ? await litterbox(await normalize(dl)) : null;
+      if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
+      cache[wm] = { url: cdnUrl, source: "cdn", ts: now }; saveCache(cache); return cdnUrl;
+    }
   }
 
   return ent ? ent.url || "app" : "app";

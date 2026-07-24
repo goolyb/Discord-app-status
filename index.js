@@ -129,7 +129,8 @@ function flush() {
 function push(job) {
   pending = job;
   if (flushTimer) return;
-  const wait = Math.max(0, 15000 - (Date.now() - lastSentAt));
+  const minGap = (cfg.minUpdateSeconds || 5) * 1000;
+  const wait = Math.max(0, minGap - (Date.now() - lastSentAt));
   flushTimer = setTimeout(flush, wait);
 }
 
