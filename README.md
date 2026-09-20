@@ -101,12 +101,17 @@ blacklist           list blocked domains
 
 ## Customizing icons
 
-Names and icon overrides live in `config.json`:
+Names, sizing, and icon overrides live in `config.json`:
 
+- **`iconSize`** — total square canvas resolution for icons (default `256`, e.g. `256`, `512`).
+- **`iconContent`** — size of the icon inside the canvas (default `160`; e.g. `192` or `216` for custom padding). Changing `iconSize` or `iconContent` automatically invalidates and re-pads the icon cache.
 - **`nameMap`** — map a window class / process name to a nicer display name.
 - **`iconOverride`** — pin a specific icon for an app. Matched by substring, so `"ghidra"` catches `ghidraRun-Ghidra` too. Value can be a URL (`"ghidra": "https://.../ghidra.png"`) or a local file (`"discord": "icons/discord.png"`).
+- **`yieldToOtherRpc`** — set to `true` (default) to automatically clear status and yield priority when a game (like Dota 2, CS2) or another app uses Discord RPC natively.
 
-If an app shows the wrong icon or none, add it to `iconOverride`. To force a refresh, delete its entry from `icon-cache.json`.
+On Windows, high-resolution icons (256x256 / 512x512) are extracted directly from `.exe` files via the Win32 `PrivateExtractIcons` API with HighQuality bicubic scaling.
+
+If an app shows the wrong icon or none, add it to `iconOverride`. Cache entries automatically update when size parameters change.
 
 ## Showing the current website
 
@@ -153,6 +158,9 @@ For a quick test without signing, load it temporarily via `about:debugging#/runt
 
 ### Config
 
+- **`iconSize`** — icon canvas dimension in pixels (default `256`).
+- **`iconContent`** — icon graphic dimension within canvas (default `160`).
+- **`yieldToOtherRpc`** — yield status to native Discord RPC games (default `true`).
 - **`urlPort`** — port of the local URL receiver (default `6060`).
 - **`urlMaxAgeSeconds`** — ignore reported URLs older than this (default `30`).
 - **`pollSeconds`** — how often the focused window is checked (default `5`).
@@ -162,5 +170,6 @@ For a quick test without signing, load it temporarily via `about:debugging#/runt
 ## Notes
 
 - Your Application ID is stored in `client-id.txt` (git-ignored), not in `config.json`.
+- Windows users can use `.\das.cmd` (e.g. `.\das.cmd start` or double-click `start.cmd`).
 - Presence updates are throttled to once per 5s by default (`minUpdateSeconds`), within Discord's Rich Presence rate limit, so rapid window/tab switching won't cause the status to stall.
 - Icon URLs are hosted on a free temporary host and auto-refreshed before they expire, so regularly-used apps keep working without intervention.
