@@ -25,11 +25,66 @@ function loadCache() {
 function saveCache(c) {
   try { writeFileSync(CACHE, JSON.stringify(c, null, 2)); } catch {}
 }
+function loadPad() {
+  try {
+    const cfg = JSON.parse(readFileSync(join(HERE, "config.json"), "utf8"));
+    const size = Number(cfg.iconSize);
+    const content = Number(cfg.iconContent);
+    if (content > size) content = size;
+    return { size, content, key: size + "x" + content };
+  } catch {
+    return { size: size, content: content, key: `${size}x${content}` };
+  }
+}
+
 function loadOverrides() {
   try {
     const cfg = JSON.parse(readFileSync(join(HERE, "config.json"), "utf8"));
     return cfg.iconOverride || {};
   } catch { return {}; }
+}
+
+async function winPad(src) {
+  const { size, content } = loadPad();
+  const out = join(
+    
+    tmpdir(),
+    "das-pad-" + content + "-" + src.replace(/[^a-z0-9]/gi, "_").slice(-40) + ".png"
+  );
+  const { stdout } = await run(
+    "powershell",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      join(HERE, "winicon.ps1"),
+      src,
+      out,
+      String(size),
+      String(content),
+    ],
+    { timeout: 20000 }
+  );
+  const p = stdout.trim();
+  return p && existsSync(p) ? p : "";
+}
+
+// pad any icon file into a fixed square with margin
+async function normalize(path) {
+  try {
+    if (process.platform === "win32") {
+      const p = await winPad(path);
+      return p || path;
+    }
+    const { stdout } = await run("python3", [join(HERE, "resolve_icon.py"), path], {
+      timeout: 20000,
+    });
+    const p = stdout.trim();
+    return p && existsSync(p) ? p : path;
+  } catch {
+    return path;
+  }
 }
 
 async function cdnOk(slug) {
@@ -49,18 +104,6 @@ async function download(url) {
     writeFileSync(p, buf);
     return p;
   } catch { return null; }
-}
-
-// pad any icon file into a fixed square with margin (reuses resolve_icon.py)
-async function normalize(path) {
-  try {
-    if (process.platform === "win32") return path;
-    const { stdout } = await run("python3", [join(HERE, "resolve_icon.py"), path], {
-      timeout: 20000,
-    });
-    const p = stdout.trim();
-    return p && existsSync(p) ? p : path;
-  } catch { return path; }
 }
 
 // upload a local png, return a public direct-image URL (or null).
@@ -106,6 +149,7 @@ async function localIconPng(wm, exe) {
       const { stdout } = await run("powershell", [
         "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", join(HERE, "winicon.ps1"), exe, out,
+        String(loadPad().size), String(loadPad().content),
       ], { timeout: 20000 });
       const p = stdout.trim();
       return existsSync(p) ? p : "";
@@ -123,8 +167,9 @@ export async function resolveIcon(wm, exe = "") {
   if (!wm) return "app";
   const cache = loadCache();
   const now = Date.now();
+  const padKey = loadPad().key;
   const ent = cache[wm];
-  if (ent) {
+  if (ent && ent.pad === padKey) {
     if (ent.source === "cdn" || ent.source === "override") return ent.url;
     if (now - (ent.ts || 0) < REFRESH_AFTER) return ent.url;
   }
@@ -137,7 +182,7 @@ export async function resolveIcon(wm, exe = "") {
       else { const path = isAbsolute(val) ? val : join(HERE, val); src = existsSync(path) ? path : null; }
       if (src) {
         const u = await litterbox(await normalize(src));
-        if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
+        if (u) { cache[wm] = { url: u, source: "litterbox", ts: now, pad: padKey }; saveCache(cache); return u; }
       }
     }
   }
@@ -146,7 +191,7 @@ export async function resolveIcon(wm, exe = "") {
   const png = await localIconPng(wm, exe);
   if (png) {
     const u = await litterbox(png);
-    if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
+    if (u) { cache[wm] = { url: u, source: "litterbox", ts: now, pad: padKey }; saveCache(cache); return u; }
   }
 
   // 2) fallback: public icon CDN
@@ -160,8 +205,8 @@ export async function resolveIcon(wm, exe = "") {
     if (cdnUrl) {
       const dl = await download(cdnUrl);
       const u = dl ? await litterbox(await normalize(dl)) : null;
-      if (u) { cache[wm] = { url: u, source: "litterbox", ts: now }; saveCache(cache); return u; }
-      cache[wm] = { url: cdnUrl, source: "cdn", ts: now }; saveCache(cache); return cdnUrl;
+      if (u) { cache[wm] = { url: u, source: "litterbox", ts: now, pad: padKey }; saveCache(cache); return u; }
+      cache[wm] = { url: cdnUrl, source: "cdn", ts: now, pad: padKey }; saveCache(cache); return cdnUrl;
     }
   }
 

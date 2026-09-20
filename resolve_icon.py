@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
 # Linux helper: given a window class, print the absolute path to a PNG icon
 # pulled from the system icon theme / .desktop files. Prints nothing if none.
-import sys, os, glob, configparser
+import sys, os, glob, configparser, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TMP = "/tmp/discord-app-status-icons"
 
-ICON_SIZE = 256     # fixed output square
-ICON_CONTENT = 254  # visible icon size inside the square; smaller = more padding
+ICON_SIZE = 1024
+ICON_CONTENT = 1024
 
+_cfg_mtime = 0
+
+def reload_config_if_changed():
+    global _cfg_mtime, ICON_SIZE, ICON_CONTENT
+    path = os.path.join(HERE, "config.json")
+    try:
+        mtime = os.path.getmtime(path)
+        if mtime == _cfg_mtime:
+            return False
+        _cfg_mtime = mtime
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+        ICON_SIZE = int(cfg.get("iconSize") or ICON_SIZE)
+        ICON_CONTENT = int(cfg.get("iconContent") or ICON_CONTENT)
+        if ICON_CONTENT > ICON_SIZE:
+            ICON_CONTENT = ICON_SIZE
+        return True  
+    except Exception as e:
+        print("resolve_icon.py: config error:", e)
+        return False
 
 def _pad_square(pb):
     from gi.repository import GdkPixbuf
@@ -103,3 +123,7 @@ def resolve_local(wm):
 if __name__ == "__main__":
     wm = sys.argv[1] if len(sys.argv) > 1 else ""
     print(resolve_local(wm) if wm else "")
+
+if reload_config_if_changed():
+    cache = {"_meta": {"size": ICON_SIZE, "content": ICON_CONTENT}}
+    save_cache(cache)

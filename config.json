@@ -3,6 +3,9 @@
   "pollSeconds": 5,
   "minUpdateSeconds": 5,
   "hideWhenIdle": true,
+  "yieldToOtherRpc": true,
+  "iconSize": 256,
+  "iconContent": 192,
   "blacklist": [],
   "nameMap": {
     "google-chrome": "Google Chrome",
@@ -30,7 +33,6 @@
   },
   "iconOverride": {
     "ghidra": "https://cdn.jsdelivr.net/gh/selfhst/icons/png/ghidra.png",
-    "discord": "icons/discord.png",
     "ptyxis": "icons/terminal.png"
   }
 }

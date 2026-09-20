@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "DAS URL Reporter",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Reports active tab URL to local Discord App Status script.",
   "browser_specific_settings": {
     "gecko": {
@@ -13,10 +13,18 @@
   },
   "permissions": [
     "tabs",
+    "alarms",
     "http://127.0.0.1/*"
   ],
   "background": {
     "scripts": ["background.js"],
-    "persistent": false
-  }
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
 }

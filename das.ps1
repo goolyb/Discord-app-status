@@ -5,7 +5,18 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Here
 $PidFile = Join-Path $Here ".das.pid"
 $Log = Join-Path $Here "das.log"
+$ErrLog = Join-Path $Here "das.log.err"
 $IdFile = Join-Path $Here "client-id.txt"
+
+function Show-DasLog {
+  param([int]$Tail = 30, [switch]$Wait)
+  $files = @()
+  if ((Test-Path $ErrLog) -and (Get-Item $ErrLog).Length -gt 0) { $files += $ErrLog }
+  if (Test-Path $Log) { $files += $Log }
+  if (-not $files) { Write-Host "(no log output yet)"; return }
+  if ($Wait) { Get-Content $files -Tail $Tail -Wait }
+  else { Get-Content $files -Tail $Tail -ErrorAction SilentlyContinue }
+}
 $StartupLnk = Join-Path ([Environment]::GetFolderPath("Startup")) "DiscordAppStatus.lnk"
 
 function Get-RunningPid {
@@ -16,6 +27,13 @@ function Get-RunningPid {
   return $null
 }
 
+function Stop-DasTree([int]$ProcId) {
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.ParentProcessId -eq $ProcId } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Stop-Process -Id $ProcId -Force -ErrorAction SilentlyContinue
+}
+
 switch ($Command) {
   "setup" {
     $id = $Arg
@@ -24,47 +42,76 @@ switch ($Command) {
     if (-not $id) { Write-Host "Invalid ID."; break }
     Set-Content -Path $IdFile -Value $id -NoNewline
     Write-Host "Saved. Client ID: $id"
-    Write-Host "Now run: .\das.ps1 start"
+    Write-Host "Now run: .\das.cmd start"
   }
   "start" {
-    if (-not (Test-Path $IdFile)) { Write-Host "No client ID. Run: .\das.ps1 setup"; break }
+    if (-not (Test-Path $IdFile)) { Write-Host "No client ID. Run: .\das.cmd setup"; break }
     if (Get-RunningPid) { Write-Host "Already running (pid $(Get-RunningPid))."; break }
     $node = (Get-Command node -ErrorAction SilentlyContinue).Source
     if (-not $node) { Write-Host "node not found. Install Node.js."; break }
-    $p = Start-Process -FilePath $node -ArgumentList (Join-Path $Here "index.js") `
-      -WindowStyle Hidden -RedirectStandardOutput $Log -RedirectStandardError "$Log.err" -PassThru
+    $p = Start-Process -FilePath "node.exe" `
+      -ArgumentList @("index.js") `
+      -WorkingDirectory $Here -WindowStyle Hidden `
+      -RedirectStandardOutput $Log -RedirectStandardError $ErrLog -PassThru
     Set-Content -Path $PidFile -Value $p.Id -NoNewline
-    Start-Sleep -Seconds 3
-    if (Get-RunningPid) { Write-Host "Started (pid $($p.Id)). Logs: .\das.ps1 logs" }
-    else { Write-Host "Failed to start. Check das.log" }
+    Start-Sleep -Seconds 2
+    if (Get-RunningPid) { Write-Host "Started (pid $($p.Id)). Logs: .\das.cmd logs" }
+    else {
+      Write-Host "Failed to start. Last log:"
+      Show-DasLog -Tail 40
+    }
   }
   "stop" {
     $procId = Get-RunningPid
     if (-not $procId) { Write-Host "Not running." }
-    else { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue; Remove-Item $PidFile -ErrorAction SilentlyContinue; Write-Host "Stopped." }
+    else {
+      Stop-DasTree $procId
+      Remove-Item $PidFile -ErrorAction SilentlyContinue
+      Write-Host "Stopped."
+    }
   }
   "restart" { & $MyInvocation.MyCommand.Path stop; Start-Sleep 1; & $MyInvocation.MyCommand.Path start }
   "status" {
     $procId = Get-RunningPid
-    if ($procId) { Write-Host "* running (pid $procId)"; Get-Content $Log -Tail 1 -ErrorAction SilentlyContinue }
+    if ($procId) { Write-Host "* running (pid $procId)"; Show-DasLog -Tail 3 }
     else { Write-Host "o stopped" }
   }
-  "logs" { Get-Content $Log -Tail 30 -Wait }
+  "logs" { Show-DasLog -Tail 50 -Wait }
   "enable-autostart" {
-    $ws = New-Object -ComObject WScript.Shell
-    $lnk = $ws.CreateShortcut($StartupLnk)
-    $lnk.TargetPath = "powershell.exe"
-    $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $Here 'das.ps1')`" start"
-    $lnk.WorkingDirectory = $Here
-    $lnk.Save()
-    Write-Host "Autostart enabled (runs on login)."
+    $success = $false
+    try {
+      $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Here\das.ps1`" start" -WorkingDirectory $Here
+      $trigger = New-ScheduledTaskTrigger -AtLogOn
+      $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 1
+      $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+
+      Register-ScheduledTask -TaskName "DiscordAppStatus" -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+      $success = $true
+      Write-Host "Autostart enabled via Scheduled Task (highest admin privileges)."
+    } catch {}
+
+    if (-not $success) {
+      # Fallback: create Windows Startup folder shortcut
+      $ws = New-Object -ComObject WScript.Shell
+      $lnk = $ws.CreateShortcut($StartupLnk)
+      $lnk.TargetPath = "powershell.exe"
+      $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Here\das.ps1`" start"
+      $lnk.WorkingDirectory = $Here
+      $lnk.Save()
+      Write-Host "Autostart enabled via Startup folder shortcut."
+    }
   }
-  "disable-autostart" { Remove-Item $StartupLnk -ErrorAction SilentlyContinue; Write-Host "Autostart disabled." }
+  "disable-autostart" {
+    Unregister-ScheduledTask -TaskName "DiscordAppStatus" -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-Item $StartupLnk -ErrorAction SilentlyContinue
+    Write-Host "Autostart disabled."
+  }
   default {
     @"
 discord-app-status - show your focused app in Discord
 
-Usage: .\das.ps1 <command>
+Usage: .\das.cmd <command>
+   (or double-click start.cmd)
 
   setup [ID]          set your Discord Application ID (asks if omitted)
   start               start the integration
@@ -75,7 +122,8 @@ Usage: .\das.ps1 <command>
   enable-autostart    run automatically on login
   disable-autostart   don't run on login
 
-First time:  .\das.ps1 setup   then   .\das.ps1 start
+First time:  .\das.cmd setup   then   .\das.cmd start
+  Daily:       start.cmd   or   .\das.cmd start
 "@ | Write-Host
   }
 }

@@ -1,6 +1,6 @@
 import { Client } from "@xhayper/discord-rpc";
 import { execFile } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, readlinkSync } from "node:fs";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,16 @@ if (!clientId || clientId.startsWith("PASTE")) {
   process.exit(1);
 }
 
+function getHighResUrl(url) {
+  if (!url) return url;
+  
+  let cleanUrl = url.replace(/([?&])(w|width|h|height|size)=\d+/g, '');
+  
+  cleanUrl = cleanUrl.replace('hqdefault.jpg', 'maxresdefault.jpg');
+  
+  return cleanUrl;
+}
+
 const client = new Client({ clientId });
 
 const urlPort = cfg.urlPort || 6060;
@@ -43,6 +53,8 @@ createServer((req, res) => {
 }).listen(urlPort, "127.0.0.1", () => {
   console.log("URL receiver on 127.0.0.1:" + urlPort);
 });
+
+
 
 function domainOf(u) {
   try {
@@ -122,6 +134,95 @@ async function getFocused() {
   }
 }
 
+const YIELD_KEY = "__yield__";
+const YIELD_TTL_MS = 2000;
+const DISCORD_HOST = /^(discord|vesktop|webcord|electron)$/i;
+let yieldCache = { at: 0, others: [], pending: null };
+
+function asList(v) {
+  if (v == null || v === "") return [];
+  return (Array.isArray(v) ? v : [v]).map(String).filter(Boolean);
+}
+
+function yieldEnabled() {
+  try {
+    const c = JSON.parse(readFileSync(join(here, "config.json"), "utf8"));
+    return c.yieldToOtherRpc !== false;
+  } catch {
+    return cfg.yieldToOtherRpc !== false;
+  }
+}
+
+async function winOtherRpc() {
+  const { stdout } = await run(
+    "powershell",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      join(here, "winrpc.ps1"),
+      String(process.pid),
+    ],
+    { timeout: 20000, windowsHide: true }
+  );
+  const raw = stdout.trim();
+  const m = raw.match(/\{[\s\S]*\}\s*$/);
+  const data = JSON.parse(m ? m[0] : "{}");
+  return asList(data.others);
+}
+
+function linuxOtherRpc() {
+  const others = [];
+  let pids;
+  try {
+    pids = readdirSync("/proc");
+  } catch {
+    return others;
+  }
+  for (const pid of pids) {
+    if (!/^\d+$/.test(pid)) continue;
+    if (Number(pid) === process.pid) continue;
+    let comm = "";
+    try {
+      comm = readFileSync(`/proc/${pid}/comm`, "utf8").trim();
+    } catch {
+      continue;
+    }
+    if (DISCORD_HOST.test(comm)) continue;
+    try {
+      for (const fd of readdirSync(`/proc/${pid}/fd`)) {
+        const t = readlinkSync(`/proc/${pid}/fd/${fd}`);
+        if (t.includes("discord-ipc")) {
+          others.push(comm);
+          break;
+        }
+      }
+    } catch {}
+  }
+  return [...new Set(others)];
+}
+
+async function otherRpcClients() {
+  if (!yieldEnabled()) return [];
+  if (yieldCache.pending) return yieldCache.pending;
+  if (Date.now() - yieldCache.at < YIELD_TTL_MS) return yieldCache.others;
+
+  yieldCache.pending = (isWin ? winOtherRpc() : Promise.resolve(linuxOtherRpc()))
+    .then((others) => {
+      yieldCache = { at: Date.now(), others, pending: null };
+      return others;
+    })
+    .catch((e) => {
+      console.error("yield scan failed:", e.message);
+      yieldCache.pending = null;
+      yieldCache.at = Date.now();
+      return yieldCache.others;
+    });
+
+  return yieldCache.pending;
+}
+
 let last = null;
 const startedAt = Date.now();
 
@@ -153,6 +254,16 @@ function push(job) {
 }
 
 async function tick() {
+  const others = await otherRpcClients();
+  if (others.length) {
+    if (last !== YIELD_KEY) {
+      last = YIELD_KEY;
+      push({ clear: true });
+      console.log("Yielding Discord status to", others.join(", "));
+    }
+    return;
+  }
+
   const cur = await getFocused();
   const app = cur?.app ?? null;
   const domain = app ? browserDomain(cur.wm) : null;
@@ -168,7 +279,7 @@ async function tick() {
   const icon = await resolveIcon(cur.wm, cur.exe);
 
   const activity = {
-    name: app.toUpperCase(),
+    name: app,
     type: 0,
     statusDisplayType: 0,
     startTimestamp: startedAt,
@@ -202,5 +313,7 @@ async function connect() {
     }
   }
 }
+
+
 
 connect();

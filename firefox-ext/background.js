@@ -42,4 +42,19 @@ browser.tabs.onUpdated.addListener((id, info) => {
 });
 browser.windows.onFocusChanged.addListener(schedule);
 
+// Content scripts (and alarms) wake this page after Firefox idle-unloads it.
+browser.runtime.onMessage.addListener(() => {
+  schedule();
+});
+
+browser.alarms.create("keepalive", { periodInMinutes: 1 });
+browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "keepalive") report();
+});
+
+browser.runtime.onStartup.addListener(() => {
+  browser.storage.local.clear();
+});
+
 report();
+
