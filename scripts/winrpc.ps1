@@ -2,7 +2,7 @@
 param([int]$SelfPid)
 
 $ErrorActionPreference = "SilentlyContinue"
-$skip = [regex]'^(Discord|DiscordCanary|DiscordPTB|DiscordDevelopment|vesktop|WebCord|steamwebhelper|GameOverlayUI|EpicWebHelper|EasyAntiCheat|EasyAntiCheat_EOS)$'
+$skip = [regex]'^(Discord|DiscordCanary|DiscordPTB|DiscordDevelopment|vesktop|WebCord|steamwebhelper|GameOverlayUI|EpicWebHelper|EasyAntiCheat|EasyAntiCheat_EOS|Cursor|Code|VSCodium)$'
 $rpcCmd = [regex]'discord[-_]?rpc|discord_game_sdk|pypresence|@xhayper/discord-rpc|discordrpc'
 $store = [regex]'(?i)\\(steamapps\\common|Epic Games\\|XboxGames\\|Riot Games\\)'
 $dllNames = @(
