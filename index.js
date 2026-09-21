@@ -253,18 +253,38 @@ function push(job) {
   flushTimer = setTimeout(flush, wait);
 }
 
+function isFocusedAppInOthers(cur, others) {
+  if (!cur || !others || !others.length) return false;
+  const wm = (cur.wm || "").toLowerCase();
+  const app = (cur.app || "").toLowerCase();
+  const exe = (cur.exe || "").toLowerCase();
+
+  return others.some((o) => {
+    const low = o.toLowerCase();
+    if (!low) return false;
+    return (
+      wm === low ||
+      app === low ||
+      (wm && low.includes(wm)) ||
+      (wm && wm.includes(low)) ||
+      (exe && exe.includes(low))
+    );
+  });
+}
+
 async function tick() {
+  const cur = await getFocused();
   const others = await otherRpcClients();
-  if (others.length) {
+
+  if (isFocusedAppInOthers(cur, others)) {
     if (last !== YIELD_KEY) {
       last = YIELD_KEY;
       push({ clear: true });
-      console.log("Yielding Discord status to", others.join(", "));
+      console.log("Yielding Discord status to focused app:", cur?.app || cur?.wm, "(others:", others.join(", ") + ")");
     }
     return;
   }
 
-  const cur = await getFocused();
   const app = cur?.app ?? null;
   const domain = app ? browserDomain(cur.wm) : null;
   const key = app ? app + "|" + (domain || "") : null;
