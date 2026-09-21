@@ -5,7 +5,9 @@ Shows the app you're currently focused on as your Discord status — with the ap
 Instead of Discord's per-game detection, this reads your focused window and updates your Rich Presence, e.g. `In Firefox`, `In Terminal`, `In Ghidra` — each with its own icon.
 
 ## How does it look
-![Example:](assets/image.png)
+<img src="assets/image.png" width="250" alt="Example">
+<img src="assets/image2.png" width="250" alt="Example">
+
 
 ## How it works
 
