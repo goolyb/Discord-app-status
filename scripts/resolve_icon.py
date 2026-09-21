@@ -13,7 +13,7 @@ _cfg_mtime = 0
 
 def reload_config_if_changed():
     global _cfg_mtime, ICON_SIZE, ICON_CONTENT
-    path = os.path.join(HERE, "config.json")
+    path = os.path.join(HERE, "..", "config.json")
     try:
         mtime = os.path.getmtime(path)
         if mtime == _cfg_mtime:

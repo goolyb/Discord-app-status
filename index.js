@@ -119,7 +119,7 @@ async function getFocusedLinux() {
 async function getFocusedWindows() {
   const { stdout } = await run("powershell", [
     "-NoProfile", "-ExecutionPolicy", "Bypass",
-    "-File", join(here, "winfocus.ps1"),
+    "-File", join(here, "scripts", "winfocus.ps1"),
   ], { timeout: 15000 });
   const data = JSON.parse(stdout.trim() || "{}");
   if (!data || !data.wm) return null;
@@ -161,7 +161,7 @@ async function winOtherRpc() {
       "-ExecutionPolicy",
       "Bypass",
       "-File",
-      join(here, "winrpc.ps1"),
+      join(here, "scripts", "winrpc.ps1"),
       String(process.pid),
     ],
     { timeout: 20000, windowsHide: true }

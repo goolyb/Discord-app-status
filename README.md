@@ -20,7 +20,7 @@ flowchart TD
 
     subgraph Focus["Focus source (per OS)"]
         LINUX["Linux: GNOME Focused Window<br/>D-Bus via gdbus"]
-        WIN["Windows: winfocus.ps1<br/>WinAPI GetForegroundWindow"]
+        WIN["Windows: scripts/winfocus.ps1<br/>WinAPI GetForegroundWindow"]
     end
 
     subgraph Core["index.js — Node process"]

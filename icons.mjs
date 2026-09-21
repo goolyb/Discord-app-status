@@ -58,7 +58,7 @@ async function winPad(src) {
       "-ExecutionPolicy",
       "Bypass",
       "-File",
-      join(HERE, "winicon.ps1"),
+      join(HERE, "scripts", "winicon.ps1"),
       src,
       out,
       String(size),
@@ -77,7 +77,7 @@ async function normalize(path) {
       const p = await winPad(path);
       return p || path;
     }
-    const { stdout } = await run("python3", [join(HERE, "resolve_icon.py"), path], {
+    const { stdout } = await run("python3", [join(HERE, "scripts", "resolve_icon.py"), path], {
       timeout: 20000,
     });
     const p = stdout.trim();
@@ -148,14 +148,14 @@ async function localIconPng(wm, exe) {
       const out = join(tmpdir(), "das-icon-" + wm.replace(/[^a-z0-9]/gi, "_") + ".png");
       const { stdout } = await run("powershell", [
         "-NoProfile", "-ExecutionPolicy", "Bypass",
-        "-File", join(HERE, "winicon.ps1"), exe, out,
+        "-File", join(HERE, "scripts", "winicon.ps1"), exe, out,
         String(loadPad().size), String(loadPad().content),
       ], { timeout: 20000 });
       const p = stdout.trim();
       return existsSync(p) ? p : "";
     }
     // linux/other: gtk icon theme via python helper
-    const { stdout } = await run("python3", [join(HERE, "resolve_icon.py"), wm], {
+    const { stdout } = await run("python3", [join(HERE, "scripts", "resolve_icon.py"), wm], {
       timeout: 20000,
     });
     const p = stdout.trim();
