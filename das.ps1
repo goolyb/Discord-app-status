@@ -54,11 +54,12 @@ switch ($Command) {
       -WorkingDirectory $Here -WindowStyle Hidden `
       -RedirectStandardOutput $Log -RedirectStandardError $ErrLog -PassThru
     Set-Content -Path $PidFile -Value $p.Id -NoNewline
-    Start-Sleep -Seconds 2
-    if (Get-RunningPid) { Write-Host "Started (pid $($p.Id)). Logs: .\das.cmd logs" }
-    else {
-      Write-Host "Failed to start. Last log:"
-      Show-DasLog -Tail 40
+
+    python "$Here\scripts\bar.py" start $p.Id $Log
+    switch ($LASTEXITCODE) {
+      0 { Write-Host "Started (pid $($p.Id)). Logs: .\das.cmd logs" }
+      1 { Write-Host "Failed to start. Last log:"; Show-DasLog -Tail 40 }
+      default { Write-Host "Running (pid $($p.Id)), but no ready message yet." }
     }
   }
   "stop" {
@@ -66,6 +67,7 @@ switch ($Command) {
     if (-not $procId) { Write-Host "Not running." }
     else {
       Stop-DasTree $procId
+      python "$Here\scripts\bar.py" stop $procId
       Remove-Item $PidFile -ErrorAction SilentlyContinue
       Write-Host "Stopped."
     }
@@ -91,7 +93,6 @@ switch ($Command) {
     } catch {}
 
     if (-not $success) {
-      # Fallback: create Windows Startup folder shortcut
       $ws = New-Object -ComObject WScript.Shell
       $lnk = $ws.CreateShortcut($StartupLnk)
       $lnk.TargetPath = "powershell.exe"

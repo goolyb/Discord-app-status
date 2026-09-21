@@ -4,7 +4,6 @@ param([int]$SelfPid)
 $ErrorActionPreference = "SilentlyContinue"
 $skip = [regex]'^(Discord|DiscordCanary|DiscordPTB|DiscordDevelopment|vesktop|WebCord|steamwebhelper|GameOverlayUI|EpicWebHelper|EasyAntiCheat|EasyAntiCheat_EOS)$'
 $rpcCmd = [regex]'discord[-_]?rpc|discord_game_sdk|pypresence|@xhayper/discord-rpc|discordrpc'
-$store = [regex]'(?i)\\(steamapps\\common|Epic Games\\|XboxGames\\|Riot Games\\)'
 $dllNames = @(
   "discord-rpc.dll",
   "discord_rpc.dll",
@@ -18,6 +17,17 @@ function Add-Found([string]$name) {
   if ($name -and -not $found.Contains($name)) { [void]$found.Add($name) }
 }
 
+if (Get-Process Cursor -ErrorAction SilentlyContinue) {
+  if (Test-Path "$env:USERPROFILE\.cursor\extensions\*discord*" -ErrorAction SilentlyContinue) {
+    Add-Found "Cursor"
+  }
+}
+if (Get-Process Code -ErrorAction SilentlyContinue) {
+  if (Test-Path "$env:USERPROFILE\.vscode\extensions\*discord*" -ErrorAction SilentlyContinue) {
+    Add-Found "Code"
+  }
+}
+
 foreach ($p in Get-CimInstance Win32_Process) {
   if ([int]$p.ProcessId -eq $SelfPid) { continue }
   $base = [IO.Path]::GetFileNameWithoutExtension($p.Name)
@@ -25,22 +35,25 @@ foreach ($p in Get-CimInstance Win32_Process) {
 
   if ($p.CommandLine -and $rpcCmd.IsMatch($p.CommandLine)) {
     Add-Found $base
+    try {
+      $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($p.ParentProcessId)" -ErrorAction SilentlyContinue
+      if ($parent) {
+        $pbase = [IO.Path]::GetFileNameWithoutExtension($parent.Name)
+        if ($pbase -and -not $skip.IsMatch($pbase)) { Add-Found $pbase }
+      }
+    } catch {}
     continue
   }
 
-  $exe = $p.ExecutablePath
-  if (-not $exe) { continue }
-  if ($store.IsMatch($exe)) {
-    Add-Found $base
-    continue
-  }
-
-  $dir = [IO.Path]::GetDirectoryName($exe)
-  if (-not $dir) { continue }
-  foreach ($dll in $dllNames) {
-    if (Test-Path -LiteralPath ([IO.Path]::Combine($dir, $dll))) {
-      Add-Found $base
-      break
+  if ($exe) {
+    $dir = [IO.Path]::GetDirectoryName($exe)
+    if ($dir) {
+      foreach ($dll in $dllNames) {
+        if (Test-Path -LiteralPath ([IO.Path]::Combine($dir, $dll))) {
+          Add-Found $base
+          break
+        }
+      }
     }
   }
 }
