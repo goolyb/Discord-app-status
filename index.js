@@ -334,6 +334,41 @@ async function connect() {
   }
 }
 
+import { spawn } from "child_process";
+import RPC from "discord-rpc";
+
+const discordClientId = "YOUR_CLIENT_ID";
+const rpc = new RPC.Client({ transport: "ipc" });
+let currentState = null;
+
+async function main() {
+  await rpc.login({ clientId });
+
+  const py = spawn("python", ["poller.py"]);
+  let buf = "";
+  py.stdout.on("data", (chunk) => {
+    buf += chunk.toString();
+    let lines = buf.split("\n");
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const { state, exe } = JSON.parse(line);
+      if (state === currentState) continue;
+      currentState = state;
+
+      if (state === "ide") {
+        rpc.clearActivity(); 
+      } else if (state === "game") {
+        rpc.setActivity({ details: "Playing Dota 2", state: "In match" });
+      } else {
+        rpc.setActivity({ details: "Idle" }); 
+      }
+    }
+  });
+}
+
+main();
+
 
 
 connect();
